@@ -121,9 +121,9 @@ class HitBTCClient(object):
     def __init__(self, demo = True):
 
         if demo:
-            self.endpoint = 'http://demo-api.hitbtc.com'
+            self.endpoint = 'https://demo-api.hitbtc.com'
         else:
-            self.endpoint = 'http://api.hitbtc.com'
+            self.endpoint = 'https://api.hitbtc.com'
 
         with open('.keys', 'rb') as f:
             keys = pickle.load(f)
