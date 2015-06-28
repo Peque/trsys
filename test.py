@@ -136,12 +136,13 @@ class HitBTCClient(object):
 
     def get_symbols(self):
         resource = '/api/1/public/symbols'
-        response = requests.get(self.endpoint + resource)
+        response = requests.get(self.endpoint + resource, verify = True)
 
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
             print(response)
+            print(json.dumps(response.json(), indent=4))
             return None
 
         symbols = Symbols()
@@ -175,14 +176,14 @@ class HitBTCClient(object):
                              hashlib.sha512).hexdigest()
         headers = {'X-Signature': signature}
 
-        response = requests.get(self.endpoint + resource,
-                                params = params,
-                                headers = headers)
+        response = requests.get(self.endpoint + resource, params = params,
+                                headers = headers, verify = True)
 
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
             print(response)
+            print(json.dumps(response.json(), indent=4))
             return None
 
         balances = Balances()
@@ -194,6 +195,60 @@ class HitBTCClient(object):
 
         return balances
 
+    def new_order(self, side, quantity, symbol, limit = None):
+        """
+        TODO
+        """
+        assert all(isinstance(x, str) for x in (side, symbol))
+        assert isinstance(quantity, int)
+        assert not limit or isinstance(limit, float)
+        resource = '/api/1/trading/new_order'
+
+        # Parameters
+        params = {'nonce': int(time.time() * 1000000),
+                  'apikey': self.api_key}
+
+        # More parameters
+        data = {}
+        new_id = hash(time.time()) ^ hash(side) ^ \
+                 hash(quantity) ^ hash(symbol) ^ hash(limit)
+        data['clientOrderId'] = str(new_id)[0:32]
+        data['side'] = side
+        data['quantity'] = quantity
+        data['symbol'] = symbol
+        data['timeInForce'] = 'GTC'
+
+        if limit is not None:
+            data['price'] = limit
+            data['type'] = 'limit'
+        else:
+            data['type'] = 'market'
+
+        # Signature
+        string = resource + '?'
+        string += '&'.join(['{}={}'.format(x, params[x]) for x in params])
+        string += '&'.join(['{}={}'.format(x, data[x]) for x in data])
+        signature = hmac.new(bytearray(self.secret_key.encode('ascii')),
+                             string.encode('ascii'),
+                             hashlib.sha512).hexdigest()
+        headers = {'X-Signature': signature}
+
+        response = requests.post(self.endpoint + resource,
+                                 params = params,
+                                 data = data,
+                                 headers = headers)
+
+        # Check the response status code
+        if response.status_code != 200:
+            # TODO: create log system
+            print(response)
+            print(json.dumps(response.json(), indent = 4))
+            return None
+
+        # TODO
+        print(response.json())
+        return
+
     def get_ticker(self, symbol):
         """
         TODO
@@ -201,12 +256,13 @@ class HitBTCClient(object):
         assert isinstance(symbol, str)
 
         resource = '/api/1/public/{}/ticker'.format(symbol)
-        response = requests.get(self.endpoint + resource)
+        response = requests.get(self.endpoint + resource, verify = True)
 
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
             print(response)
+            print(json.dumps(response.json(), indent=4))
             return None
 
         aux = response.json()
@@ -228,12 +284,14 @@ class HitBTCClient(object):
         params = {'max_results': max_results,
                   'format_item': 'object',
                   'side': 'true'}
-        response = requests.get(self.endpoint + resource, params = params)
+        response = requests.get(self.endpoint + resource, params = params,
+                                verify = True)
 
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
             print(response)
+            print(json.dumps(response.json(), indent=4))
             return None
 
         aux = response.json()
@@ -244,7 +302,5 @@ if __name__ == '__main__':
     client = HitBTCClient()
 
     symbol = client.get_symbols()['XMRBTC']
-    balance = client.get_balances()
-    print(balance['BTC'])
-    print(balance['XMR'])
+    print(client.new_order('buy', 1, 'XMRBTC', 0.0014))
 
