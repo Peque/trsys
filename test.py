@@ -1,7 +1,9 @@
 
+import hmac
 import time
 import json
 import pickle
+import hashlib
 import requests
 
 
@@ -80,6 +82,41 @@ class Symbols(dict):
         return str(list(self.values()))
 
 
+class Balance(object):
+    """
+    TODO
+    """
+    def __init__(self, currency, cash, reserved):
+        assert isinstance(currency, str)
+        assert all(isinstance(x, float) for x in [cash, reserved])
+
+        self.currency = currency
+        self.cash = cash
+        self.reserved = reserved
+
+    def __repr__(self):
+        return '{0.currency}: {0.cash} (+{0.reserved})'.format(self)
+
+
+class Balances(dict):
+    """
+    TODO
+    """
+    def __init__(self, balance_list = None):
+        if not balance_list:
+            balance_list = []
+        assert all(isinstance(x, Balance) for x in balance_list)
+        for balance in balance_list:
+            self[balance.currency] = balance
+
+    def add(self, balance):
+        assert isinstance(balance, Balance)
+        self[balance.currency] = balance
+
+    def __repr__(self):
+        return str(list(self.values()))
+
+
 class HitBTCClient(object):
     def __init__(self, demo = True):
 
@@ -88,6 +125,15 @@ class HitBTCClient(object):
         else:
             self.endpoint = 'http://api.hitbtc.com'
 
+        with open('.keys', 'rb') as f:
+            keys = pickle.load(f)
+        if demo:
+            self.api_key = keys['demo']['api']
+            self.secret_key = keys['demo']['secret']
+        else:
+            self.api_key = keys['real']['api']
+            self.secret_key = keys['real']['secret']
+
     def get_symbols(self):
         resource = '/api/1/public/symbols'
         response = requests.get(self.endpoint + resource)
@@ -95,7 +141,7 @@ class HitBTCClient(object):
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
-            print(r)
+            print(response)
             return None
 
         symbols = Symbols()
@@ -111,6 +157,43 @@ class HitBTCClient(object):
 
         return symbols
 
+    def get_balances(self):
+        """
+        TODO
+        """
+        resource = '/api/1/trading/balance'
+
+        # Parameters
+        params = {'nonce': int(time.time() * 1000000),
+                  'apikey': self.api_key}
+
+        # Signature
+        string = resource + '?'
+        string += '&'.join(['{}={}'.format(x, params[x]) for x in params])
+        signature = hmac.new(bytearray(self.secret_key.encode('ascii')),
+                             string.encode('ascii'),
+                             hashlib.sha512).hexdigest()
+        headers = {'X-Signature': signature}
+
+        response = requests.get(self.endpoint + resource,
+                                params = params,
+                                headers = headers)
+
+        # Check the response status code
+        if response.status_code != 200:
+            # TODO: create log system
+            print(response)
+            return None
+
+        balances = Balances()
+        for aux in response.json()['balance']:
+            balance = Balance(aux['currency_code'],
+                              float(aux['cash']),
+                              float(aux['reserved']))
+            balances.add(balance)
+
+        return balances
+
     def get_ticker(self, symbol):
         """
         TODO
@@ -123,7 +206,7 @@ class HitBTCClient(object):
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
-            print(r)
+            print(response)
             return None
 
         aux = response.json()
@@ -150,32 +233,10 @@ class HitBTCClient(object):
         # Check the response status code
         if response.status_code != 200:
             # TODO: create log system
-            print(r)
+            print(response)
             return None
 
         aux = response.json()
-
-
-def load_api_key(demo = True):
-    """
-    TODO
-    """
-    with open('.keys', 'rb') as f:
-        keys = pickle.load(f)
-    if demo:
-        return keys['demo']['api']
-    return keys['real']['api']
-
-def load_secret_key(demo = True):
-    """
-    TODO
-    """
-    with open('.keys', 'rb') as f:
-        keys = pickle.load(f)
-    if demo:
-        return keys['demo']['secret']
-    return keys['real']['secret']
-
 
 
 if __name__ == '__main__':
@@ -183,8 +244,7 @@ if __name__ == '__main__':
     client = HitBTCClient()
 
     symbol = client.get_symbols()['XMRBTC']
-    ticker = client.get_ticker(symbol.symbol)
-    print(ticker)
-    print(load_api_key())
-    print(load_secret_key())
+    balance = client.get_balances()
+    print(balance['BTC'])
+    print(balance['XMR'])
 
